@@ -1,51 +1,60 @@
-const COLOR = {
-    RED: 'RED',
-    BLACK: 'BLACK'
-}
-
-const TYPE = {
-    ROOT: 'root',
-    LEFT: 'left',
-    RIGHT: 'right',
-}
+const BLACK = 'BLACK'
+const RED = 'RED'
+const ROOT = 'root'
+const LEFT = 'left'
+const RIGHT = 'right'
+const OPPOSITE = {left: 'right', right: 'left'}
 
 class RBNode {
 
     constructor(parent = null) {
         this.parent = parent
-        this.key = null
-        this.color = COLOR.BLACK
+        this.key = undefined
+        this.value = undefined
+        this.left = undefined
+        this.right = undefined
+        this.color = BLACK
         this.alive = false
     }
 
-    set(key, value = null) {
+    findNode(key) {
+        if (this.key === key || this.key === undefined) {
+            return this
+        }
+        if (key < this.key) {
+            return this.left.findNode(key)
+        }
+        return this.right.findNode(key)
+    }
+
+    type() {
+        if (this.parent === null) {
+            return ROOT
+        }
+        if (this === this.parent.left) {
+            return LEFT
+        }
+        return RIGHT
+    }
+
+    set(key, value) {
         this.value = value
         this.alive = true
-        if (this.key === null) {
+        if (this.key === undefined) {
             this.key = key
             this.left = new this.constructor(this)
             this.right = new this.constructor(this)
-            this.color = COLOR.RED
+            this.color = RED
             this.rebalance()
         }
     }
 
-    type(opposite = false) {
-        if (this.parent === null) {
-            return TYPE.ROOT
-        }
-        if ((this === this.parent.left) ^ opposite) {
-            return TYPE.LEFT
-        }
-        return TYPE.RIGHT
-    }
-
     rebalance() {
         const type = this.type()
-        if (type === TYPE.ROOT) {
-            this.color = COLOR.BLACK
-        } else if (this.parent.color === COLOR.RED) {
-            const opposite = this.type(true)
+        if (type === ROOT) {
+            this.color = BLACK
+        } else if (this.parent.color === RED) {
+            const opposite = OPPOSITE[type]
             if (type === this.parent.type()) {
                 this.handleZigZig(type, opposite)
             } else {
@@ -58,10 +67,10 @@ class RBNode {
     handleZigZig(type, opposite) {
         const grandParent = this.parent.parent
         const uncle = grandParent[opposite]
-        this.parent.color = COLOR.BLACK
-        grandParent.color = COLOR.RED
-        if (uncle.color === COLOR.RED) {
-            uncle.color = COLOR.BLACK
+        this.parent.color = BLACK
+        grandParent.color = RED
+        if (uncle.color === RED) {
+            uncle.color = BLACK
             grandParent.rebalance()
         } else {
             this.parent.rotate(type, opposite)
@@ -82,61 +91,56 @@ class RBNode {
         }
     }
 
-    findNode(key) {
-        if (key === this.key || this.key === null) {
-            return this
-        }
-        if (key < this.key) {
-            return this.left.findNode(key)
-        }
-        return this.right.findNode(key)
+    delete() {
+        this.value = undefined
+        this.alive = false
     }
 
     copy(parent = null) {
         const node = new this.constructor(parent)
-        if (this.key !== null) {
+        if (this.key !== undefined) {
             node.key = this.key
             node.value = this.value
-            node.color = this.color
-            node.alive = this.alive
             node.left = this.left.copy(node)
             node.right = this.right.copy(node)
+            node.color = this.color
+            node.alive = this.alive
         }
         return node
     }
 
-    *traverse(callback, {
-        reverse = false,
-        low = null,
-        high = null,
-        includeLow = true,
-        includeHigh = true
-    } = {}) {
-        if (this.key === null) {
+    *traverse(reverse, low, high, includeLow, includeHigh) {
+        const isAboveLow = (low === undefined)
+            ? (key) => true
+            : (includeLow)
+                ? (key) => key >= low
+                : (key) => key > low
+        const isBelowHigh = (high === undefined)
+            ? (key) => true
+            : (includeHigh)
+                ? (key) => key <= high
+                : (key) => key < high
+        if (!reverse) {
+            yield* this.walk(LEFT, RIGHT, isAboveLow, isBelowHigh)
+        } else {
+            yield* this.walk(RIGHT, LEFT, isBelowHigh, isAboveLow)
+        }
+    }
+
+    *walk(start, end, visitStart, visitEnd) {
+        if (this.key === undefined) {
             return
         }
-        const direction1 = reverse ? TYPE.RIGHT : TYPE.LEFT
-        const direction2 = reverse ? TYPE.LEFT : TYPE.RIGHT
-        const aboveLow =
-            low == null ||
-            this.key > low ||
-            includeLow && this.key === low
-        const belowHigh =
-            high == null ||
-            this.key < high ||
-            includeHigh && this.key === high
-        if (reverse ? belowHigh : aboveLow) {
-            yield* this[direction1].traverse(callback, {
-                reverse, low, high, includeLow, includeHigh
-            })
+        const startVisit = visitStart(this.key)
+        const endVisit = visitEnd(this.key)
+        if (startVisit) {
+            yield* this[start].walk(start, end, visitStart, visitEnd)
         }
-        if (aboveLow && belowHigh) {
-            yield callback(this)
+        if (startVisit && endVisit && this.alive) {
+            yield this
         }
-        if (reverse ? aboveLow : belowHigh) {
-            yield* this[direction2].traverse(callback, {
-                reverse, low, high, includeLow, includeHigh
-            })
+        if (endVisit) {
+            yield* this[end].walk(start, end, visitStart, visitEnd)
         }
     }
 }
@@ -151,18 +155,14 @@ export default class RBTree {
         return this._size
     }
 
-    get deadSize() {
-        return this._deadSize
-    }
-
     get totalSize() {
-        return this._size + this._deadSize
+        return this._totalSize
     }
 
     clear() {
         this._root = new RBNode()
         this._size = 0
-        this._deadSize = 0
+        this._totalSize = 0
     }
 
     has(key) {
@@ -173,12 +173,12 @@ export default class RBTree {
         return this._root.findNode(key).value
     }
 
-    insert(key, value = null) {
+    insert(key, value = undefined) {
         const node = this._root.findNode(key)
         if (!node.alive) {
             this._size++
-            if (node.key !== null) {
-                this._deadSize--
+            if (node.key === undefined) {
+                this._totalSize++
             }
         }
         node.set(key, value)
@@ -190,9 +190,8 @@ export default class RBTree {
     delete(key) {
         const node = this._root.findNode(key)
         if (node.alive) {
-            node.alive = false
+            node.delete()
             this._size--
-            this._deadSize++
             return true
         }
         return false
@@ -202,51 +201,67 @@ export default class RBTree {
         const tree = new this.constructor()
         tree._root = this._root.copy()
         tree._size = this._size
-        tree._deadSize = this._deadSize
+        tree._totalSize = this._totalSize
         return tree
     }
 
     rebuild() {
         const tree = new this.constructor()
-        for (const [key, value] of this.entries()) {
-            tree.insert(key, value)
+        const nodes = [this._root]
+        for (let i = 0;; i++) {
+            if (i >= nodes.length) {
+                break
+            }
+            if (nodes[i].key !== undefined) {
+                nodes.push(nodes[i].left)
+                nodes.push(nodes[i].right)
+                if (nodes[i].alive) {
+                    tree.insert(nodes[i].key, nodes[i].value)
+                }
+            }
         }
         return tree
     }
 
     *entries({
         reverse = false,
-        low = null,
-        high = null,
+        low = undefined,
+        high = undefined,
         includeLow = true,
         includeHigh = true
     } = {}) {
-        yield* this._root.traverse((node) => [node.key, node.value], {
+        for (const node of this._root.traverse(
             reverse, low, high, includeLow, includeHigh
-        })
+        )) {
+            yield [node.key, node.value]
+        }
     }
 
     *keys({
         reverse = false,
-        low = null,
-        high = null,
+        low = undefined,
+        high = undefined,
         includeLow = true,
         includeHigh = true
     } = {}) {
-        yield* this._root.traverse((node) => node.key, {
+        for (const node of this._root.traverse(
             reverse, low, high, includeLow, includeHigh
-        })
+        )) {
+            yield node.key
+        }
     }
 
     *values({
         reverse = false,
-        low = null,
-        high = null,
+        low = undefined,
+        high = undefined,
         includeLow = true,
         includeHigh = true
     } = {}) {
-        yield* this._root.traverse((node) => node.value, {
+        for (const node of this._root.traverse(
             reverse, low, high, includeLow, includeHigh
-        })
+        )) {
+            yield node.value
+        }
     }
 }
