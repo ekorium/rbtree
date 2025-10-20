@@ -18,9 +18,18 @@ for (let i = 0; i < 100; i++) {
 console.log('keys:', tree.keys().toArray())
 console.log('size:', tree.size)
 console.log('totalSize', tree.totalSize)
+console.log('Hard deleting some nodes')
+
+for (let i = 0; i < 250; i++) {
+    tree.delete(parseInt(1000 * Math.random()), true)
+}
+
+console.log('keys:', tree.keys().toArray())
+console.log('size:', tree.size)
+console.log('totalSize', tree.totalSize)
 console.log('Rebuilding tree')
 
-tree = tree.rebuild()
+tree.rebuild()
 
 console.log('keys:', tree.keys().toArray())
 console.log('size:', tree.size)

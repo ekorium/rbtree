@@ -1,20 +1,23 @@
 const BLACK = 'BLACK'
 const RED = 'RED'
-const ROOT = 'root'
 const LEFT = 'left'
 const RIGHT = 'right'
 const OPPOSITE = {left: 'right', right: 'left'}
 
 class RBNode {
 
-    constructor(parent = null) {
-        this.parent = parent
+    constructor(parent = undefined) {
+        this.parent = parent ?? this
         this.key = undefined
         this.value = undefined
-        this.left = undefined
-        this.right = undefined
+        this.left = this
+        this.right = this
         this.color = BLACK
         this.alive = false
+    }
+
+    get type() {
+        return (this === this.parent.left) ? LEFT : RIGHT
     }
 
     findNode(key) {
@@ -27,14 +30,16 @@ class RBNode {
         return this.right.findNode(key)
     }
 
-    type() {
-        if (this.parent === null) {
-            return ROOT
-        }
-        if (this === this.parent.left) {
-            return LEFT
-        }
-        return RIGHT
+    rotate(type, opposite) {
+        const parent = this.parent
+        this.connectParent(parent.parent, parent.type)
+        this[opposite].connectParent(parent, type)
+        parent.connectParent(this, opposite)
+    }
+
+    connectParent(parent, type) {
+        this.parent = parent
+        parent[type] = this
     }
 
     set(key, value) {
@@ -42,62 +47,106 @@ class RBNode {
         this.alive = true
         if (this.key === undefined) {
             this.key = key
-            this.left = new this.constructor(this)
-            this.right = new this.constructor(this)
+            this.left = new RBNode(this)
+            this.right = new RBNode(this)
             this.color = RED
-            this.rebalance()
+            this.rebalanceRed()
         }
     }
 
-    rebalance() {
-        const type = this.type()
-        if (type === ROOT) {
+    rebalanceRed() {
+        if (this.parent instanceof Anchor) {
             this.color = BLACK
         } else if (this.parent.color === RED) {
+            const type = this.type
             const opposite = OPPOSITE[type]
-            if (type === this.parent.type()) {
-                this.handleZigZig(type, opposite)
+            if (type === this.parent.type) {
+                const grandParent = this.parent.parent
+                const uncle = grandParent[opposite]
+                this.parent.color = BLACK
+                grandParent.color = RED
+                if (uncle.color === RED) {
+                    uncle.color = BLACK
+                    grandParent.rebalanceRed()
+                } else {
+                    this.parent.rotate(type, opposite)
+                }
             } else {
                 this.rotate(type, opposite)
-                this[opposite].rebalance()
+                this[opposite].rebalanceRed()
             }
         }
     }
 
-    handleZigZig(type, opposite) {
-        const grandParent = this.parent.parent
-        const uncle = grandParent[opposite]
-        this.parent.color = BLACK
-        grandParent.color = RED
-        if (uncle.color === RED) {
-            uncle.color = BLACK
-            grandParent.rebalance()
+    delete(hard) {
+        if (this.key === undefined) {
+            return
+        }
+        if (!hard) {
+            this.value = undefined
+            this.alive = false
+        } else if (this.left.key === undefined) {
+            this.replace(this.left)
+        } else if (this.right.key === undefined) {
+            this.replace(this.right)
         } else {
-            this.parent.rotate(type, opposite)
+            let successor = this.right
+            while (successor.left.key !== undefined) {
+                successor = successor.left
+            }
+            this.key = successor.key
+            this.value = successor.value
+            this.alive = successor.alive
+            successor.delete(hard)
         }
     }
 
-    rotate(type, opposite) {
-        const parent = this.parent
-        this.connectParent(parent.parent, parent.type())
-        this[opposite].connectParent(parent, type)
-        parent.connectParent(this, opposite)
-    }
-
-    connectParent(parent, type) {
-        this.parent = parent
-        if (parent) {
-            parent[type] = this
+    replace(node) {
+        node.connectParent(this.parent, this.type)
+        if (this.color === BLACK && node.color === BLACK) {
+            node.rebalanceDoubleBlack()
+        } else {
+            node.color = BLACK
         }
     }
 
-    delete() {
-        this.value = undefined
-        this.alive = false
+    rebalanceDoubleBlack() {
+        if (this.parent instanceof Anchor) {
+            return
+        }
+        const type = this.type
+        const opposite = OPPOSITE[type]
+        const sibling = this.parent[opposite]
+        const niece = sibling[type]
+        const nephew = sibling[opposite]
+        if (sibling.color === RED) {
+            sibling.color = BLACK
+            niece.color = RED
+            sibling.rotate(opposite, type)
+        } else if (nephew.color === BLACK) {
+            if (niece.color === BLACK) {
+                sibling.color = RED
+                if (this.parent.color === BLACK) {
+                    this.parent.rebalanceDoubleBlack()
+                } else {
+                    this.parent.color = BLACK
+                }
+            } else {
+                niece.color = BLACK
+                nephew.color = RED
+                niece.rotate(type, opposite)
+                this.rebalanceDoubleBlack()
+            }
+        } else {
+            sibling.color = this.parent.color
+            this.parent.color = BLACK
+            nephew.color = BLACK
+            sibling.rotate(opposite, type)
+        }
     }
 
-    copy(parent = null) {
-        const node = new this.constructor(parent)
+    copy(parent) {
+        const node = new RBNode(parent)
         if (this.key !== undefined) {
             node.key = this.key
             node.value = this.value
@@ -145,69 +194,76 @@ class RBNode {
     }
 }
 
+class Anchor extends RBNode {
+
+    left = new RBNode(this)
+}
+
 export default class RBTree {
 
-    constructor() {
-        this.clear()
-    }
+    #anchor = new Anchor()
+    #size = 0
+    #totalSize = 0
 
     get size() {
-        return this._size
+        return this.#size
     }
 
     get totalSize() {
-        return this._totalSize
+        return this.#totalSize
     }
 
-    clear() {
-        this._root = new RBNode()
-        this._size = 0
-        this._totalSize = 0
+    get #root() {
+        return this.#anchor.left
+    }
+
+    set #root(value) {
+        this.#anchor.left = value
     }
 
     has(key) {
-        return this._root.findNode(key).alive
+        return this.#root.findNode(key).alive
     }
 
     get(key) {
-        return this._root.findNode(key).value
+        return this.#root.findNode(key).value
     }
 
     insert(key, value = undefined) {
-        const node = this._root.findNode(key)
+        const node = this.#root.findNode(key)
         if (!node.alive) {
-            this._size++
+            this.#size++
             if (node.key === undefined) {
-                this._totalSize++
+                this.#totalSize++
             }
         }
         node.set(key, value)
-        if (this._root.parent) {
-            this._root = this._root.parent
-        }
     }
 
-    delete(key) {
-        const node = this._root.findNode(key)
-        if (node.alive) {
-            node.delete()
-            this._size--
+    delete(key, hard = false) {
+        const node = this.#root.findNode(key)
+        if (node.key !== undefined && (node.alive || hard)) {
+            if (node.alive) {
+                this.#size--
+            }
+            if (hard) {
+                this.#totalSize--
+            }
+            node.delete(hard)
             return true
         }
         return false
     }
 
-    copy() {
-        const tree = new this.constructor()
-        tree._root = this._root.copy()
-        tree._size = this._size
-        tree._totalSize = this._totalSize
-        return tree
+    clear() {
+        this.#root = new RBNode()
+        this.#size = 0
+        this.#totalSize = 0
     }
 
     rebuild() {
-        const tree = new this.constructor()
-        const nodes = [this._root]
+        const tree = new RBTree()
+        const nodes = [this.#root]
         for (let i = 0;; i++) {
             if (i >= nodes.length) {
                 break
@@ -220,6 +276,15 @@ export default class RBTree {
                 }
             }
         }
+        this.#root = tree.#root
+        this.#totalSize = this.#size
+    }
+
+    copy() {
+        const tree = new RBTree()
+        tree.#root = this.#root.copy(tree.#anchor)
+        tree.#size = this.#size
+        tree.#totalSize = this.#totalSize
         return tree
     }
 
@@ -230,7 +295,7 @@ export default class RBTree {
         includeLow = true,
         includeHigh = true
     } = {}) {
-        for (const node of this._root.traverse(
+        for (const node of this.#root.traverse(
             reverse, low, high, includeLow, includeHigh
         )) {
             yield [node.key, node.value]
@@ -244,7 +309,7 @@ export default class RBTree {
         includeLow = true,
         includeHigh = true
     } = {}) {
-        for (const node of this._root.traverse(
+        for (const node of this.#root.traverse(
             reverse, low, high, includeLow, includeHigh
         )) {
             yield node.key
@@ -258,7 +323,7 @@ export default class RBTree {
         includeLow = true,
         includeHigh = true
     } = {}) {
-        for (const node of this._root.traverse(
+        for (const node of this.#root.traverse(
             reverse, low, high, includeLow, includeHigh
         )) {
             yield node.value
