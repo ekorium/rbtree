@@ -1,5 +1,7 @@
 type Color = 'BLACK' | 'RED'
 type Direction = 'left' | 'right'
+type BooleanFunction<K> = (a: K) => boolean
+type CompareFunction<K> = (a: K, b: K) => number
 type TraverseOptions<K> = {
     reverse?: boolean;
     low?: K;
@@ -8,7 +10,7 @@ type TraverseOptions<K> = {
     includeHigh?: boolean;
 }
 
-class RBNode<K extends number | string, V> {
+class RBNode<K, V> {
 
     parent: RBNode<K, V>
     left: RBNode<K, V> = this
@@ -30,14 +32,18 @@ class RBNode<K extends number | string, V> {
         return (this === this.parent.left) ? 'right' : 'left'
     }
 
-    findNode(key: K): RBNode<K, V> {
-        if (this.key === key || this.key === undefined) {
+    findNode(key: K, compare: CompareFunction<K>): RBNode<K, V> {
+        if (this.key === undefined) {
             return this
         }
-        if (key < this.key) {
-            return this.left.findNode(key)
+        const relation = compare(key, this.key)
+        if (relation === 0) {
+            return this
         }
-        return this.right.findNode(key)
+        if (relation < 0) {
+            return this.left.findNode(key, compare)
+        }
+        return this.right.findNode(key, compare)
     }
 
     rotate(type: Direction, opposite: Direction): void {
@@ -168,37 +174,11 @@ class RBNode<K extends number | string, V> {
         return node
     }
 
-    *traverse({
-        reverse,
-        low,
-        high,
-        includeLow,
-        includeHigh
-    }: TraverseOptions<K>): Generator<[K, V | undefined]> {
-        const isAboveLow: (key: K) => boolean =
-            (low === undefined)
-            ? (key) => true
-            : (includeLow)
-                ? (key) => key >= low
-                : (key) => key > low
-        const isBelowHigh: (key: K) => boolean =
-            (high === undefined)
-            ? (key) => true
-            : (includeHigh)
-                ? (key) => key <= high
-                : (key) => key < high
-        if (!reverse) {
-            yield* this.walk('left', 'right', isAboveLow, isBelowHigh)
-        } else {
-            yield* this.walk('right', 'left', isBelowHigh, isAboveLow)
-        }
-    }
-
     *walk(
         start: Direction,
         end: Direction,
-        visitStart: (key: K) => boolean,
-        visitEnd: (key: K) => boolean
+        visitStart: BooleanFunction<K>,
+        visitEnd: BooleanFunction<K>
     ): Generator<[K, V | undefined]> {
         if (this.key === undefined) {
             return
@@ -217,16 +197,25 @@ class RBNode<K extends number | string, V> {
     }
 }
 
-class Anchor<K extends number | string, V> extends RBNode<K, V> {
+class Anchor<K, V> extends RBNode<K, V> {
 
     left: RBNode<K, V> = new RBNode(this)
 }
 
-export default class RBTree<K extends number | string, V = undefined> {
+export default class RBTree<K, V = undefined> {
 
     #anchor: Anchor<K, V> = new Anchor()
     #size: number = 0
     #totalSize: number = 0
+    #compare: CompareFunction<K> = (a, b) => {
+        return (a === b) ? 0 : (a > b) ? 1 : -1
+    }
+
+    constructor(compare?: CompareFunction<K>) {
+        if (compare) {
+            this.#compare = compare
+        }
+    }
 
     get size(): number {
         return this.#size
@@ -245,15 +234,15 @@ export default class RBTree<K extends number | string, V = undefined> {
     }
 
     has(key: K): boolean {
-        return this.#root.findNode(key).alive
+        return this.#root.findNode(key, this.#compare).alive
     }
 
     get(key: K): V | undefined {
-        return this.#root.findNode(key).value
+        return this.#root.findNode(key, this.#compare).value
     }
 
     insert(key: K, value?: V): void {
-        const node = this.#root.findNode(key)
+        const node = this.#root.findNode(key, this.#compare)
         if (!node.alive) {
             this.#size++
             if (node.key === undefined) {
@@ -264,7 +253,7 @@ export default class RBTree<K extends number | string, V = undefined> {
     }
 
     delete(key: K, hard: boolean = false): boolean {
-        const node = this.#root.findNode(key)
+        const node = this.#root.findNode(key, this.#compare)
         if (node.key !== undefined && (node.alive || hard)) {
             if (node.alive) {
                 this.#size--
@@ -319,7 +308,7 @@ export default class RBTree<K extends number | string, V = undefined> {
         includeLow = true,
         includeHigh = true
     }: TraverseOptions<K> = {}): Generator<[K, V | undefined]> {
-        for (const [key, value] of this.#root.traverse({
+        for (const [key, value] of this.#traverse({
             reverse, low, high, includeLow, includeHigh
         })) {
             yield [key, value]
@@ -333,7 +322,7 @@ export default class RBTree<K extends number | string, V = undefined> {
         includeLow = true,
         includeHigh = true
     }: TraverseOptions<K> = {}): Generator<K>{
-        for (const [key, value] of this.#root.traverse({
+        for (const [key, value] of this.#traverse({
             reverse, low, high, includeLow, includeHigh
         })) {
             yield key
@@ -347,10 +336,36 @@ export default class RBTree<K extends number | string, V = undefined> {
         includeLow = true,
         includeHigh = true
     }: TraverseOptions<K> = {}): Generator<V | undefined> {
-        for (const [key, value] of this.#root.traverse({
+        for (const [key, value] of this.#traverse({
             reverse, low, high, includeLow, includeHigh
         })) {
             yield value
+        }
+    }
+
+    *#traverse({
+        reverse,
+        low,
+        high,
+        includeLow,
+        includeHigh
+    }: TraverseOptions<K>): Generator<[K, V | undefined]> {
+        const isAboveLow: BooleanFunction<K> =
+            (low === undefined)
+            ? (key) => true
+            : (includeLow)
+                ? (key) => this.#compare(key, low) >= 0
+                : (key) => this.#compare(key, low) > 0
+        const isBelowHigh: BooleanFunction<K> =
+            (high === undefined)
+            ? (key) => true
+            : (includeHigh)
+                ? (key) => this.#compare(key, high) <= 0
+                : (key) => this.#compare(key, high) < 0
+        if (!reverse) {
+            yield* this.#root.walk('left', 'right', isAboveLow, isBelowHigh)
+        } else {
+            yield* this.#root.walk('right', 'left', isBelowHigh, isAboveLow)
         }
     }
 }
