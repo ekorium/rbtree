@@ -1,26 +1,36 @@
-const BLACK = 'BLACK'
-const RED = 'RED'
-const LEFT = 'left'
-const RIGHT = 'right'
-const OPPOSITE = {left: 'right', right: 'left'}
+type Color = 'BLACK' | 'RED'
+type Direction = 'left' | 'right'
+type TraverseOptions<K> = {
+    reverse?: boolean;
+    low?: K;
+    high?: K;
+    includeLow?: boolean;
+    includeHigh?: boolean;
+}
 
-class RBNode {
+class RBNode<K extends number | string, V> {
 
-    constructor(parent = undefined) {
+    parent: RBNode<K, V>
+    left: RBNode<K, V> = this
+    right: RBNode<K, V> = this
+    key: K | undefined
+    value: V | undefined
+    alive: boolean = false
+    color: Color = 'BLACK'
+
+    constructor(parent?: RBNode<K, V>) {
         this.parent = parent ?? this
-        this.key = undefined
-        this.value = undefined
-        this.left = this
-        this.right = this
-        this.color = BLACK
-        this.alive = false
     }
 
-    get type() {
-        return (this === this.parent.left) ? LEFT : RIGHT
+    get type(): Direction {
+        return (this === this.parent.left) ? 'left' : 'right'
     }
 
-    findNode(key) {
+    get opposite(): Direction {
+        return (this === this.parent.left) ? 'right' : 'left'
+    }
+
+    findNode(key: K): RBNode<K, V> {
         if (this.key === key || this.key === undefined) {
             return this
         }
@@ -30,43 +40,43 @@ class RBNode {
         return this.right.findNode(key)
     }
 
-    rotate(type, opposite) {
+    rotate(type: Direction, opposite: Direction): void {
         const parent = this.parent
         this.connectParent(parent.parent, parent.type)
         this[opposite].connectParent(parent, type)
         parent.connectParent(this, opposite)
     }
 
-    connectParent(parent, type) {
+    connectParent(parent: RBNode<K, V>, type: Direction): void {
         this.parent = parent
         parent[type] = this
     }
 
-    set(key, value) {
+    set(key: K, value?: V): void {
         this.value = value
         this.alive = true
         if (this.key === undefined) {
             this.key = key
             this.left = new RBNode(this)
             this.right = new RBNode(this)
-            this.color = RED
+            this.color = 'RED'
             this.rebalanceRed()
         }
     }
 
-    rebalanceRed() {
+    rebalanceRed(): void {
         if (this.parent instanceof Anchor) {
-            this.color = BLACK
-        } else if (this.parent.color === RED) {
+            this.color = 'BLACK'
+        } else if (this.parent.color === 'RED') {
             const type = this.type
-            const opposite = OPPOSITE[type]
+            const opposite = this.opposite
             if (type === this.parent.type) {
                 const grandParent = this.parent.parent
                 const uncle = grandParent[opposite]
-                this.parent.color = BLACK
-                grandParent.color = RED
-                if (uncle.color === RED) {
-                    uncle.color = BLACK
+                this.parent.color = 'BLACK'
+                grandParent.color = 'RED'
+                if (uncle.color === 'RED') {
+                    uncle.color = 'BLACK'
                     grandParent.rebalanceRed()
                 } else {
                     this.parent.rotate(type, opposite)
@@ -78,7 +88,7 @@ class RBNode {
         }
     }
 
-    delete(hard) {
+    delete(hard: boolean): void {
         if (this.key === undefined) {
             return
         }
@@ -101,52 +111,52 @@ class RBNode {
         }
     }
 
-    replace(node) {
+    replace(node: RBNode<K, V>): void {
         node.connectParent(this.parent, this.type)
-        if (this.color === BLACK && node.color === BLACK) {
+        if (this.color === 'BLACK' && node.color === 'BLACK') {
             node.rebalanceDoubleBlack()
         } else {
-            node.color = BLACK
+            node.color = 'BLACK'
         }
     }
 
-    rebalanceDoubleBlack() {
+    rebalanceDoubleBlack(): void {
         if (this.parent instanceof Anchor) {
             return
         }
         const type = this.type
-        const opposite = OPPOSITE[type]
+        const opposite = this.opposite
         const sibling = this.parent[opposite]
         const niece = sibling[type]
         const nephew = sibling[opposite]
-        if (sibling.color === RED) {
-            sibling.color = BLACK
-            niece.color = RED
+        if (sibling.color === 'RED') {
+            sibling.color = 'BLACK'
+            niece.color = 'RED'
             sibling.rotate(opposite, type)
-        } else if (nephew.color === BLACK) {
-            if (niece.color === BLACK) {
-                sibling.color = RED
-                if (this.parent.color === BLACK) {
+        } else if (nephew.color === 'BLACK') {
+            if (niece.color === 'BLACK') {
+                sibling.color = 'RED'
+                if (this.parent.color === 'BLACK') {
                     this.parent.rebalanceDoubleBlack()
                 } else {
-                    this.parent.color = BLACK
+                    this.parent.color = 'BLACK'
                 }
             } else {
-                niece.color = BLACK
-                nephew.color = RED
+                niece.color = 'BLACK'
+                nephew.color = 'RED'
                 niece.rotate(type, opposite)
                 this.rebalanceDoubleBlack()
             }
         } else {
             sibling.color = this.parent.color
-            this.parent.color = BLACK
-            nephew.color = BLACK
+            this.parent.color = 'BLACK'
+            nephew.color = 'BLACK'
             sibling.rotate(opposite, type)
         }
     }
 
-    copy(parent) {
-        const node = new RBNode(parent)
+    copy(parent: RBNode<K, V>): RBNode<K, V> {
+        const node = new RBNode<K, V>(parent)
         if (this.key !== undefined) {
             node.key = this.key
             node.value = this.value
@@ -158,27 +168,38 @@ class RBNode {
         return node
     }
 
-    *traverse(reverse, low, high, includeLow, includeHigh) {
-        const isAboveLow =
+    *traverse({
+        reverse,
+        low,
+        high,
+        includeLow,
+        includeHigh
+    }: TraverseOptions<K>): Generator<[K, V | undefined]> {
+        const isAboveLow: (key: K) => boolean =
             (low === undefined)
             ? (key) => true
             : (includeLow)
                 ? (key) => key >= low
                 : (key) => key > low
-        const isBelowHigh =
+        const isBelowHigh: (key: K) => boolean =
             (high === undefined)
             ? (key) => true
             : (includeHigh)
                 ? (key) => key <= high
                 : (key) => key < high
         if (!reverse) {
-            yield* this.walk(LEFT, RIGHT, isAboveLow, isBelowHigh)
+            yield* this.walk('left', 'right', isAboveLow, isBelowHigh)
         } else {
-            yield* this.walk(RIGHT, LEFT, isBelowHigh, isAboveLow)
+            yield* this.walk('right', 'left', isBelowHigh, isAboveLow)
         }
     }
 
-    *walk(start, end, visitStart, visitEnd) {
+    *walk(
+        start: Direction,
+        end: Direction,
+        visitStart: (key: K) => boolean,
+        visitEnd: (key: K) => boolean
+    ): Generator<[K, V | undefined]> {
         if (this.key === undefined) {
             return
         }
@@ -188,7 +209,7 @@ class RBNode {
             yield* this[start].walk(start, end, visitStart, visitEnd)
         }
         if (startVisit && endVisit && this.alive) {
-            yield this
+            yield [this.key, this.value]
         }
         if (endVisit) {
             yield* this[end].walk(start, end, visitStart, visitEnd)
@@ -196,42 +217,42 @@ class RBNode {
     }
 }
 
-class Anchor extends RBNode {
+class Anchor<K extends number | string, V> extends RBNode<K, V> {
 
-    left = new RBNode(this)
+    left: RBNode<K, V> = new RBNode(this)
 }
 
-export default class RBTree {
+export default class RBTree<K extends number | string, V = undefined> {
 
-    #anchor = new Anchor()
-    #size = 0
-    #totalSize = 0
+    #anchor: Anchor<K, V> = new Anchor()
+    #size: number = 0
+    #totalSize: number = 0
 
-    get size() {
+    get size(): number {
         return this.#size
     }
 
-    get totalSize() {
+    get totalSize(): number {
         return this.#totalSize
     }
 
-    get #root() {
+    get #root(): RBNode<K, V> {
         return this.#anchor.left
     }
 
-    set #root(value) {
+    set #root(value: RBNode<K, V>) {
         this.#anchor.left = value
     }
 
-    has(key) {
+    has(key: K): boolean {
         return this.#root.findNode(key).alive
     }
 
-    get(key) {
+    get(key: K): V | undefined {
         return this.#root.findNode(key).value
     }
 
-    insert(key, value = undefined) {
+    insert(key: K, value?: V): void {
         const node = this.#root.findNode(key)
         if (!node.alive) {
             this.#size++
@@ -242,7 +263,7 @@ export default class RBTree {
         node.set(key, value)
     }
 
-    delete(key, hard = false) {
+    delete(key: K, hard: boolean = false): boolean {
         const node = this.#root.findNode(key)
         if (node.key !== undefined && (node.alive || hard)) {
             if (node.alive) {
@@ -257,14 +278,14 @@ export default class RBTree {
         return false
     }
 
-    clear() {
+    clear(): void {
         this.#root = new RBNode()
         this.#size = 0
         this.#totalSize = 0
     }
 
-    rebuild() {
-        const tree = new RBTree()
+    rebuild(): void {
+        const tree = new RBTree<K, V>()
         const nodes = [this.#root]
         for (let i = 0;; i++) {
             if (i >= nodes.length) {
@@ -283,8 +304,8 @@ export default class RBTree {
         this.#totalSize = this.#size
     }
 
-    copy() {
-        const tree = new RBTree()
+    copy(): RBTree<K, V> {
+        const tree = new RBTree<K, V>()
         tree.#root = this.#root.copy(tree.#anchor)
         tree.#size = this.#size
         tree.#totalSize = this.#totalSize
@@ -297,11 +318,11 @@ export default class RBTree {
         high = undefined,
         includeLow = true,
         includeHigh = true
-    } = {}) {
-        for (const node of this.#root.traverse(
+    }: TraverseOptions<K> = {}): Generator<[K, V | undefined]> {
+        for (const [key, value] of this.#root.traverse({
             reverse, low, high, includeLow, includeHigh
-        )) {
-            yield [node.key, node.value]
+        })) {
+            yield [key, value]
         }
     }
 
@@ -311,11 +332,11 @@ export default class RBTree {
         high = undefined,
         includeLow = true,
         includeHigh = true
-    } = {}) {
-        for (const node of this.#root.traverse(
+    }: TraverseOptions<K> = {}): Generator<K>{
+        for (const [key, value] of this.#root.traverse({
             reverse, low, high, includeLow, includeHigh
-        )) {
-            yield node.key
+        })) {
+            yield key
         }
     }
 
@@ -325,11 +346,11 @@ export default class RBTree {
         high = undefined,
         includeLow = true,
         includeHigh = true
-    } = {}) {
-        for (const node of this.#root.traverse(
+    }: TraverseOptions<K> = {}): Generator<V | undefined> {
+        for (const [key, value] of this.#root.traverse({
             reverse, low, high, includeLow, includeHigh
-        )) {
-            yield node.value
+        })) {
+            yield value
         }
     }
 }

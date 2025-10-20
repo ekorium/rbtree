@@ -1,6 +1,6 @@
-import RBTree from './RBTree.js'
+import RBTree from './RBTree.ts'
 
-let tree = new RBTree()
+let tree: RBTree<number, number> = new RBTree()
 
 console.log('Adding random keys')
 
