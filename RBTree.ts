@@ -157,21 +157,6 @@ export default class RBTree<K, V = undefined> {
     }
 
 
-    *entries({
-        reverse = false,
-        low = undefined,
-        high = undefined,
-        includeLow = true,
-        includeHigh = true
-    }: TraverseOptions<K> = {}): Generator<[K, V | undefined]> {
-        for (const [key, value] of this.#traverse({
-            reverse, low, high, includeLow, includeHigh
-        })) {
-            yield [key, value]
-        }
-    }
-
-
     *keys({
         reverse = false,
         low = undefined,
@@ -179,7 +164,7 @@ export default class RBTree<K, V = undefined> {
         includeLow = true,
         includeHigh = true
     }: TraverseOptions<K> = {}): Generator<K>{
-        for (const [key, value] of this.#traverse({
+        for (const [key, value] of this.entries({
             reverse, low, high, includeLow, includeHigh
         })) {
             yield key
@@ -194,7 +179,7 @@ export default class RBTree<K, V = undefined> {
         includeLow = true,
         includeHigh = true
     }: TraverseOptions<K> = {}): Generator<V | undefined> {
-        for (const [key, value] of this.#traverse({
+        for (const [key, value] of this.entries({
             reverse, low, high, includeLow, includeHigh
         })) {
             yield value
@@ -202,9 +187,13 @@ export default class RBTree<K, V = undefined> {
     }
 
 
-    *#traverse(
-        {reverse, low, high, includeLow, includeHigh}: TraverseOptions<K>
-    ): Generator<[K, V | undefined]> {
+    *entries({
+        reverse = false,
+        low = undefined,
+        high = undefined,
+        includeLow = true,
+        includeHigh = true
+    }: TraverseOptions<K> = {}): Generator<[K, V | undefined]> {
 
         let isAboveLow: BooleanFunction<K> = (key) => true
         let isBelowHigh: BooleanFunction<K> = (key) => true
@@ -222,18 +211,18 @@ export default class RBTree<K, V = undefined> {
         }
 
         if (!reverse) {
-            yield* this.#walk(
+            yield* this.#traverse(
                 this.#root, 'left', 'right', isAboveLow, isBelowHigh
             )
         } else {
-            yield* this.#walk(
+            yield* this.#traverse(
                 this.#root, 'right', 'left', isBelowHigh, isAboveLow
             )
         }
     }
 
 
-    *#walk(
+    *#traverse(
         node: RBNode<K, V>,
         start: Direction,
         end: Direction,
@@ -250,7 +239,7 @@ export default class RBTree<K, V = undefined> {
         const endVisit = visitEnd(key)
 
         if (startVisit) {
-            yield* this.#walk(
+            yield* this.#traverse(
                 node[start], start, end, visitStart, visitEnd
             )
         }
@@ -260,7 +249,7 @@ export default class RBTree<K, V = undefined> {
         }
 
         if (endVisit) {
-            yield* this.#walk(
+            yield* this.#traverse(
                 node[end], start, end, visitStart, visitEnd
             )
         }
