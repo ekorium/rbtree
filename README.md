@@ -32,5 +32,6 @@ set.delete(5, true) // lazy deletion
 set.size // -> 9
 set.totalSize // -> 10
 set.rebuild()
-set.totalSize // -> 9
+set.totalSize // -> 
+set.copy() // -> deep copy of the whole tree
 ```
